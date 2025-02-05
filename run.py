@@ -4,27 +4,26 @@ import multiprocessing
 import uvicorn
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException
+from facade_service.facade_service import facade_service
+from logging_service.logging_service import serve
+from messages_service.messages_service import message_service
 
-from facade_service import facade_service
-from logging_service import logging_service
-from messages_service import message_service
-
-env = load_dotenv()
+load_dotenv(override=True)
 
 host = os.environ.get("host", "127.0.0.1")
-facade_service_host = os.environ.get("facade_service_host", 8000)
-logging_service_host = os.environ.get("logging_service_host", 8001)
-messages_service_host = os.environ.get("messages_service_host", 8002)
+facade_service_port = int(os.environ.get("facade_service_port", 8000))
+logging_service_port = int(os.environ.get("logging_service_port", 50051))
+messages_service_port = int(os.environ.get("messages_service_port", 8002))
+
 
 def run_facade():
-    uvicorn.run(facade_service, host=host, port=facade_service_host)
+    uvicorn.run(facade_service, host=host, port=facade_service_port)
 
 def run_logging():
-    uvicorn.run(logging_service, host=host, port=logging_service_host)
+    serve(logging_service_port)
     
 def run_messages():
-    uvicorn.run(message_service, host=host, port=messages_service_host)
+    uvicorn.run(message_service, host=host, port=messages_service_port)
 
 if __name__ == "__main__":   
     p1 = multiprocessing.Process(target=run_facade)
