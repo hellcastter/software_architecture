@@ -1,46 +1,110 @@
-## Microservices with Hazelcast Distributed Map
+# Microservices_with_MessageQueue (Kafka)
 
-I changed run.py logic, so it starts 3 logging-services on different ports (see .env). Each logging-service starts its own Hazelcast instance. Instead of dictionary, I used Hazelcast Distributed Map to store logs. Now facade-service chooses at random one of the logging-services to send logs to. If the chosen logging-service is down, facade-service chooses another one.
+## Usage
+```
+docker-compose up
+```
 
-### 1. Write 10 messages
-Using Postman I sent 10 POST requests to http://127.0.0.1:8000/?msg=msg{i} to facade-service. At the screen below you can see that each request was sent to random logging-service ("Logged message {port}: msg{i}").
-![Terminal](./images/1.terminal.png)
+Then run run.sh to start the services. Here are the available commands:
+| Flag              | Description                                                                 |
+|-------------------|-----------------------------------------------------------------------------|
+| `--start-logging` | Starts the logging service(s) using gRPC and Hazelcast on specified ports.  |
+| `--start-messages`| Starts the message service(s) using Uvicorn on specified ports.             |
+| `--start-facade`  | Starts the facade service using Uvicorn on the configured port.             |
+| `--start-config`  | Starts the configuration server using Uvicorn on the configured port.       |
+| `--stop-logging`  | Stops the logging service(s) and any associated Hazelcast instances.        |
+| `--stop-messages` | Stops the message service(s).                                               |
+| `--stop-facade`   | Stops the facade service.                                                   |
+| `--stop-config`   | Stops the configuration server.                                             |
+| `--start-all`     | Starts all services: logging, messages, facade, and configuration.          |
+| `--stop-all`      | Stops all services: logging, messages, facade, and configuration.           |
 
-### 2. Check logs
-To check logs I sent GET request to http://127.0.0.1:8000. As you can see, all 10 messages were successfully logged.
-![Postman](./images/2.postman.png)
 
-### 3. Stop one of the logging-services
-I stopped logging-service on port 50051 using `kill -9`. Also, I killed corresponding Hazelcast instance on port 5701.
-![Terminal](./images/3.kill.png)
+You can run 
+```
+./run.sh --start-all
+```
+to start all services at once or run 
+```
+./run.sh --start-logging
+./run.sh --start-messages
+./run.sh --start-facade
+./run.sh --start-config
+```
+in different terminals to start each service separately.
 
-After that tried to receive logs again. As you can see, facade-service chose another logging-service to send logs to. All 10 messages were successfully logged.
-  
-![Terminal](./images/3.terminal.png)
-![Postman](./images/3.postman.png)
+Also use 
+```
+./run.sh --stop-all
+```
+to stop all services at once or run 
+```
+./run.sh --stop-messages
+```
+to stop the message service.
 
-### 4. Stop another logging-service
-After that I recreated scene and stopped 2 logging-services on port 50051 and 50052 consistently. Also, I killed
-corresponding Hazelcast instances on ports 5701 and 5702. 
-![Terminal](./images/4.kill.png)
+## Services
 
-After that tried to receive logs again. As you can see, facade-service chose the last logging-service to send logs to. All 10 messages were successfully logged.
+| Service            | Ports             | Method | Endpoint           | Description                                         |
+|--------------------|------------------|--------|--------------------|-----------------------------------------------------|
+| Facade Service     | 8000             | GET    | `/`                | Root endpoint for facade service                    |
+|                    |                  | POST   | `/?msg=...`        | Sends a message through the facade                  |
+| Config Server      | 8001             | GET    | `/?service_name...`| Retrieves configuration for a specific service      |
+| Message Service    | 8101, 8102, 8103 | GET    | `/`                | Message service root endpoint                       |
+| Logging Service    | 50051, 50052, 50053 | -    | -                  | gRPC-based logging service (no HTTP endpoint)       |
+| Hazelcast Nodes    | 5701, 5702, 5703 | -      | -                  | Distributed in-memory data grid for logging service |
 
-![Terminal](./images/4.terminal.png)
-![Postman](./images/4.postman.png)
 
-### 5. Stop 2 logging-services at the same time
-I stopped 2 logging-services on port 50051 and 50052 at the same time. Also, I killed
-corresponding Hazelcast instances on ports 5701 and 5702.
-![Terminal](./images/5.kill.png)
+## Task 1
+Create a logging-services and a messages-services. Then send 10 messages. Show the logs of the logging service and the messages service. Call HTTP GET and show results.
 
-This time Hazelcast didn't managed to save all 10 messages. Only 7 messages were saved.
+To send 10 messages I used the following command:
+```sh
+for i in {1..10}; 
+    do curl -X POST "http://127.0.0.1:8000/?msg=msg$i"; 
+done
+```
+The logs are following.
+Facade service logs:
+![Facade service logs](./images/1_facade.png)
 
-![Postman](./images/5.postman.png)
+Logging service logs:
+![Logging service logs](./images/1_logging.png)
 
-### Additional
-Since urls of services might be dynamic, I moved logic of retrieving urls of services to config_server. Now facade-service gets urls of services from config_server. Config_server reads urls from .env file. Before each request, facade-service gets urls from config_server. If facade-service can't get urls from config_server, it shows an exception.
+Message service logs:
+![Message service logs](./images/1_messages.png)
 
-![Terminal](./images/additional.png)
+Then I called the HTTP GET method:
+```sh
+curl -X GET http://127.0.0.1:8000/   
+```
 
-Here we can see that before each request facade-service gets urls from config_server. If it would overload the system, we could add caching to config_server.
+GET request logs:
+![GET request logs](./images/1_get.png)
+
+## Task 2
+Turn off messages service and send 10 messages. Then turn off Leader message queue. Start messages service and show the logs. Call HTTP GET and show results.
+
+Firstly, I started config-service, logging-service and facade-service. Then sent 10 messages using the same command as in Task 1.
+
+To turn off the message service I used the following command:
+```sh
+docker ps
+docker exec -it <first-kafka> kafka-topics --describe --bootstrap-server kafka1:29092 --topic messages
+```
+View Leader id and stop using
+```sh
+docker stop <leader-id>
+```
+
+![Stop leader](./images/2_stop.png)
+
+After that I started the message service and checked the logs:
+![Message service logs](./images/2_messages.png)
+
+And GET request logs:
+![Stop leader](./images/2_stop.png)
+
+
+## Additional tasks
+- Use Kafka

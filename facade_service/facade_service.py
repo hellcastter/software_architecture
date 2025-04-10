@@ -2,9 +2,9 @@ import os
 import uuid
 import time
 import grpc
-import random
 import requests
 from typing import Callable
+from confluent_kafka import Producer
 
 import requests
 from dotenv import load_dotenv
@@ -24,11 +24,15 @@ max_retries = int(os.environ.get("max_retries", 3))
 retry_delay = int(os.environ.get("retry_delay", 2))
 timeout = int(os.environ.get("timeout", 10))
 
+producer = Producer({'bootstrap.servers': 'localhost:9092,localhost:9093,localhost:9094'})
+
 # Retry request
 def retry_grpc_request(callback: Callable, data):
     response = requests.get(f"http://{host}:{config_server_port}/?service_name=logging-service")
     response.raise_for_status()
     logging_service_urls = response.json()
+    
+    print(logging_service_urls)
     
     for url in logging_service_urls:
         for attempt in range(1, max_retries + 1):
@@ -61,6 +65,12 @@ def send_message(msg: str):
     data = logging_pb2.LogRequest(uuid=unique_id, msg=msg)
     
     response = retry_grpc_request(send_message_callback, data)
+    
+    try:
+        producer.produce('messages', key=unique_id, value=msg)
+        producer.flush()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     
     return {"uuid": unique_id, "status": response.status}
 

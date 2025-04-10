@@ -10,7 +10,7 @@ load_dotenv(override=True)
 
 host = os.environ.get("host", "127.0.0.1")
 logging_service_ports = list(map(int, os.environ.get("logging_service_ports", "50051").split(",")))
-message_service_port = int(os.environ.get("messages_service_port", 8002))
+message_service_ports = list(map(int, os.environ.get("message_service_ports", "8101,8102,8103").split(",")))
             
 # Facade Service
 config_server = FastAPI()
@@ -22,6 +22,8 @@ def send_message(service_name: str):
         random.shuffle(urls)
         return urls
     elif service_name == "message-service":
-        return [f'http://{host}:{message_service_port}/']
+        urls = [ f'http://{host}:{p}' for p in message_service_ports ]
+        random.shuffle(urls)
+        return urls
 
     raise HTTPException(status_code=404, detail="Service not found")    
