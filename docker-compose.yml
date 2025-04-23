@@ -1,7 +1,17 @@
-version: '3'
 services:
+  consul:
+    image: consul:1.15
+    networks:
+      - kafka-net
+    ports:
+      - "8500:8500"
+      - "8600:8600/udp"  # DNS
+    command: agent -dev -client=0.0.0.0
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.0.1
+    networks:
+      - kafka-net
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -10,6 +20,7 @@ services:
     image: confluentinc/cp-kafka:7.0.1
     depends_on:
       - zookeeper
+      - consul
     ports:
       - "9092:9092"
     environment:
@@ -20,11 +31,27 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_LISTENER_NAME_INTERNAL: PLAINTEXT_INTERNAL
+    networks:
+      - kafka-net
+    command:
+      - "bash"
+      - "-c"
+      - |
+        /etc/confluent/docker/run &
+
+        sleep 10
+        curl --request PUT \
+          --data '{"ID": "kafka1", "Name": "kafka", "Address": "localhost", "Port": 9092}' \
+          http://consul:8500/v1/agent/service/register
+
+        sleep infinity
 
   kafka2:
     image: confluentinc/cp-kafka:7.0.1
     depends_on:
       - zookeeper
+      - consul
     ports:
       - "9093:9093"
     environment:
@@ -35,11 +62,27 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_LISTENER_NAME_INTERNAL: PLAINTEXT_INTERNAL
+    networks:
+      - kafka-net
+    command:
+      - "bash"
+      - "-c"
+      - |
+        /etc/confluent/docker/run &
+
+        sleep 10
+        curl --request PUT \
+          --data '{"ID": "kafka2", "Name": "kafka", "Address": "localhost", "Port": 9093}' \
+          http://consul:8500/v1/agent/service/register
+
+        sleep infinity
 
   kafka3:
     image: confluentinc/cp-kafka:7.0.1
     depends_on:
       - zookeeper
+      - consul
     ports:
       - "9094:9094"
     environment:
@@ -50,3 +93,22 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_LISTENER_NAME_INTERNAL: PLAINTEXT_INTERNAL
+    networks:
+      - kafka-net
+    command:
+      - "bash"
+      - "-c"
+      - |
+        /etc/confluent/docker/run &
+
+        sleep 10
+        curl --request PUT \
+          --data '{"ID": "kafka3", "Name": "kafka", "Address": "localhost", "Port": 9094}' \
+          http://consul:8500/v1/agent/service/register
+
+        sleep infinity
+
+networks:
+  kafka-net:
+    driver: bridge

@@ -14,24 +14,28 @@ from fastapi import FastAPI, HTTPException
 import logging_service.logging_pb2 as logging_pb2
 import logging_service.logging_pb2_grpc as logging_pb2_grpc
 
+from consul_service.consul_service import register_service, discover_service, deregister_service
+
+PORT = 8000
+
 # environment variables
 load_dotenv(override=True)
-
-host = os.environ.get("host", "127.0.0.1")
-config_server_port = int(os.environ.get("config_server_port", 8001))
 
 max_retries = int(os.environ.get("max_retries", 3))
 retry_delay = int(os.environ.get("retry_delay", 2))
 timeout = int(os.environ.get("timeout", 10))
 
-producer = Producer({'bootstrap.servers': 'localhost:9092,localhost:9093,localhost:9094'})
+# Kafka producer setup
+kafka_urls = discover_service("kafka", include_http=False)
+bootstrap_servers = ",".join(kafka_urls)
+print(f"Kafka bootstrap servers: {bootstrap_servers}")
+producer = Producer({
+    'bootstrap.servers': bootstrap_servers,
+})
 
 # Retry request
 def retry_grpc_request(callback: Callable, data):
-    response = requests.get(f"http://{host}:{config_server_port}/?service_name=logging-service")
-    response.raise_for_status()
-    logging_service_urls = response.json()
-    
+    logging_service_urls = discover_service("logging-service", include_http=False)
     print(logging_service_urls)
     
     for url in logging_service_urls:
@@ -86,11 +90,10 @@ def get_messages_callback(data: logging_pb2.Empty, url: str):
 @facade_service.get("/")
 def get_messages():
     try:
-        response = requests.get(f"http://{host}:{config_server_port}/?service_name=message-service")
-        response.raise_for_status()
-        MESSAGE_SERVICE_URL = response.json()[0]
+        message_service_url = discover_service("message-service")[0]
 
-        response1 = requests.get(MESSAGE_SERVICE_URL)
+        print(f"Message service URL: {message_service_url}")
+        response1 = requests.get(message_service_url)
         response1.raise_for_status()
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Messages service error: {str(e)}")
@@ -98,3 +101,27 @@ def get_messages():
     response2 = retry_grpc_request(get_messages_callback, logging_pb2.Empty())
 
     return {"message": response1.json(), "logs": response2.messages}
+
+@facade_service.on_event("shutdown")
+def shutdown_event():
+    global PORT
+    deregister_service(f"facade-service-id-{PORT}")
+    print(f"Facade service with ID facade-service-id-{PORT} deregistered.")
+
+if __name__ == "__main__":
+    import uvicorn
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Run the facade service.")
+    parser.add_argument("--host", type=str, default="localhost", help="Host to run the service on.")
+    parser.add_argument("--port", type=int, default=8100, help="Port to run the service on.")
+    
+    args = parser.parse_args()
+    host = args.host
+    PORT = int(args.port)
+    
+    print(f"Starting facade service on {host}:{PORT}")
+    
+    register_service("facade-service", f"facade-service-id-{PORT}", host, PORT)
+    
+    uvicorn.run(facade_service, host=host, port=PORT)

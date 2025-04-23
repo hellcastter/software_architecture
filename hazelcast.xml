@@ -6,9 +6,9 @@
     <network>
         <join>
             <tcp-ip enabled="true">
-                <member>127.0.0.1:5701</member>
-                <member>127.0.0.1:5702</member>
-                <member>127.0.0.1:5703</member>
+                <member>localhost:5701</member>
+                <member>localhost:5702</member>
+                <member>localhost:5703</member>
             </tcp-ip>
         </join>
     </network>
